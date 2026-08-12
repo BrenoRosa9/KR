@@ -1,0 +1,67 @@
+name: kr-comparador
+
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kr
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?defina POSTGRES_PASSWORD no .env}
+      POSTGRES_DB: kr
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kr -d kr"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Sem porta publicada: o banco só é alcançável pela rede interna do compose.
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - storage:/data
+    expose:
+      - "8000"
+
+  worker:
+    build: ./backend
+    restart: unless-stopped
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - storage:/data
+    # Processo separado de propósito: extração e OCR consomem CPU por minutos, e
+    # não podem competir com o servidor que atende o navegador.
+    command: ["python", "-m", "app.worker"]
+
+  web:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-:80}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+      - caddy-logs:/var/log/caddy
+
+volumes:
+  # blobs (originais) e reports precisam de backup; cache é regenerável.
+  storage:
+  db-data:
+  caddy-data:
+  caddy-config:
+  caddy-logs:

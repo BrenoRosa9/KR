@@ -1,0 +1,41 @@
+# Um único ponto de entrada: arquivos estáticos do frontend e, sob /api, o
+# backend. Mesma origem para o navegador, o que evita CORS e mantém o cookie
+# de sessão simples e seguro.
+{$SITE_ADDRESS} {
+	encode zstd gzip
+
+	# Cabeçalhos de segurança. A CSP é restritiva de propósito: a aplicação não
+	# carrega nada de terceiros, nem o worker do pdf.js, que é servido daqui.
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy same-origin
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' blob: data:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000 {
+			# Uploads de PDF de centenas de MB e extrações longas: o padrão de
+			# 30s do proxy derrubaria requisições legítimas.
+			transport http {
+				read_timeout 300s
+				write_timeout 300s
+			}
+		}
+	}
+
+	handle {
+		root * /srv/www
+		# Rotas do React são resolvidas no cliente; o servidor devolve o index.
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 20mb
+			roll_keep 10
+		}
+	}
+}

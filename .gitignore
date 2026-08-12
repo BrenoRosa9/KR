@@ -1,0 +1,32 @@
+# Segredos e dados: nunca versionados.
+.env
+data/
+devdata/
+*.pdf
+*.db
+*.db-shm
+*.db-wal
+
+# Artefatos locais de desenvolvimento
+laudo_real.html
+smoke_*.txt
+_tmp*
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Sistema
+Thumbs.db
+.DS_Store

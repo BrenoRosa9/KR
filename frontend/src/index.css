@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-severity-error: oklch(0.55 0.19 27);
+  --color-severity-warning: oklch(0.65 0.14 70);
+  --color-severity-info: oklch(0.6 0.02 260);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased;
+}
+
+/* Números em coluna precisam de largura fixa por dígito, senão a conferência
+   visual de coordenadas fica ilegível. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

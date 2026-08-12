@@ -1,0 +1,172 @@
+{# Laudo de conferência. Impresso em A4; o CSS é deliberadamente simples para
+   que WeasyPrint e navegador produzam o mesmo resultado. #}
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <title>Laudo de conferência — {{ analysis.title }}</title>
+  <style>
+    @page { size: A4; margin: 18mm 16mm; }
+    body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 9.5pt; color: #16181d; line-height: 1.45; }
+    h1 { font-size: 16pt; margin: 0 0 2mm; }
+    h2 { font-size: 12pt; margin: 8mm 0 2mm; border-bottom: 1px solid #d4d7dd; padding-bottom: 1mm; }
+    h3 { font-size: 10.5pt; margin: 5mm 0 1.5mm; }
+    .meta { color: #5b6068; font-size: 8.5pt; }
+    table { width: 100%; border-collapse: collapse; margin: 2mm 0 4mm; }
+    th, td { border: 1px solid #d4d7dd; padding: 1.4mm 2mm; text-align: left; vertical-align: top; }
+    th { background: #f2f3f5; font-weight: 600; font-size: 8.5pt; }
+    td.num { text-align: right; font-variant-numeric: tabular-nums; }
+    .sev-error { border-left: 3px solid #b3261e; }
+    .sev-warning { border-left: 3px solid #a8710a; }
+    .sev-info { border-left: 3px solid #8a8f98; }
+    .tag { display: inline-block; font-size: 7.5pt; padding: 0.3mm 1.4mm; border: 1px solid #c3c7ce; border-radius: 2px; color: #4a4f57; }
+    .summary { display: flex; gap: 6mm; margin: 3mm 0; }
+    .summary div { flex: 1; border: 1px solid #d4d7dd; padding: 2mm; }
+    .summary strong { display: block; font-size: 15pt; }
+    .prov { color: #5b6068; font-size: 8pt; }
+    .note { background: #f7f8fa; border: 1px solid #d4d7dd; padding: 2mm; margin: 2mm 0; }
+    footer { margin-top: 8mm; border-top: 1px solid #d4d7dd; padding-top: 2mm; color: #5b6068; font-size: 8pt; }
+  </style>
+</head>
+<body>
+
+<h1>Laudo de conferência entre documentos</h1>
+<p class="meta">
+  {{ analysis.title }}<br>
+  Análise {{ analysis.id }} · gerado em {{ generated_at.strftime("%d/%m/%Y às %H:%M UTC") }}<br>
+  Critério: <strong>igualdade exata dos números</strong>
+  ({{ profile.get("name", analysis.profile_name) }})
+</p>
+
+<div class="summary">
+  <div><strong>{{ summary.get("erros", 0) }}</strong> erros</div>
+  <div><strong>{{ summary.get("avisos", 0) }}</strong> avisos</div>
+  <div><strong>{{ summary.get("informativos", 0) }}</strong> informativos</div>
+</div>
+
+<h2>Documentos analisados</h2>
+<table>
+  <tr><th>Papel</th><th>Arquivo</th><th>Sistema de referência</th><th>Origem dos dados</th></tr>
+  {% for role in ["A", "B"] %}
+    {% set extraction = extractions.get(role) %}
+    {% if extraction %}
+    <tr>
+      <td>{{ role }}</td>
+      <td>{{ extraction.label }}</td>
+      <td>
+        {% if extraction.crs_epsg %}
+          {{ extraction.datum_label }}{% if extraction.utm_zone %} / UTM {{ extraction.utm_zone }}{{ extraction.hemisphere }}{% endif %}
+          ({{ extraction.crs_epsg }})
+        {% else %}
+          <em>não identificado</em>
+        {% endif %}
+      </td>
+      <td>
+        p. {{ extraction.source_page or "—" }} · {{ extraction.table_strategy or "—" }} ·
+        distância {{ "de terreno" if extraction.distances_are_ground else "de grade" }}
+      </td>
+    </tr>
+    {% endif %}
+  {% endfor %}
+</table>
+
+{% set recomputed_a = match.get("recomputed_a") %}
+{% set recomputed_b = match.get("recomputed_b") %}
+{% if recomputed_a and recomputed_b %}
+<h2>Grandezas recalculadas a partir das coordenadas</h2>
+<table>
+  <tr><th>Grandeza</th><th>Documento A</th><th>Documento B</th></tr>
+  <tr><td>Área (m²)</td><td class="num">{{ recomputed_a.area_m2 | br(2) }}</td><td class="num">{{ recomputed_b.area_m2 | br(2) }}</td></tr>
+  <tr><td>Perímetro de terreno (m)</td><td class="num">{{ recomputed_a.perimeter_ground_m | br(3) }}</td><td class="num">{{ recomputed_b.perimeter_ground_m | br(3) }}</td></tr>
+  <tr><td>Perímetro de grade (m)</td><td class="num">{{ recomputed_a.perimeter_grid_m | br(3) }}</td><td class="num">{{ recomputed_b.perimeter_grid_m | br(3) }}</td></tr>
+  <tr><td>Fator combinado de escala</td><td class="num">{{ recomputed_a.scale_factor | br(8) }}</td><td class="num">{{ recomputed_b.scale_factor | br(8) }}</td></tr>
+  <tr>
+    <td>Fechamento pelos valores declarados</td>
+    <td class="num">{% if recomputed_a.closure_precision %}1:{{ recomputed_a.closure_precision | round | int }}{% else %}exato{% endif %}</td>
+    <td class="num">{% if recomputed_b.closure_precision %}1:{{ recomputed_b.closure_precision | round | int }}{% else %}exato{% endif %}</td>
+  </tr>
+</table>
+{% endif %}
+
+<h2>Correspondência entre vértices</h2>
+<p>
+  Método: <span class="tag">{{ match.get("method", "—") }}</span>
+  {{ match.get("pairs", 0) }} par(es) estabelecido(s).
+  {% if match.get("reversed_orientation") %}Orientação invertida entre os documentos.{% endif %}
+</p>
+{% for note in match.get("notes", []) %}
+  <div class="note">{{ note }}</div>
+{% endfor %}
+
+{% if match.get("systematic") %}
+<h2>Padrão sistemático detectado</h2>
+<div class="note">
+  {{ match["systematic"]["message"] }}
+  <br><span class="prov">Resíduo após o ajuste: {{ match["systematic"]["residual_rms"] | br(4) }} m</span>
+</div>
+{% endif %}
+
+<h2>Achados</h2>
+{% if not findings %}
+  <p>Nenhuma divergência encontrada — os números conferem entre os documentos.</p>
+{% endif %}
+
+{% for kind, items in grouped.items() %}
+  <h3>{{ kind_labels.get(kind, kind) }} ({{ items | length }})</h3>
+  <table>
+    <tr>
+      <th style="width:8%">Sev.</th>
+      <th style="width:14%">Campo</th>
+      <th style="width:16%">Assunto</th>
+      <th>Descrição e origem</th>
+      <th style="width:14%">Δ</th>
+    </tr>
+    {% for finding in items %}
+    <tr class="sev-{{ finding.severity }}">
+      <td>{{ severity_labels.get(finding.severity, finding.severity) }}</td>
+      <td>{{ field_labels.get(finding.field, finding.field or "—") }}</td>
+      <td>{{ finding.subject }}</td>
+      <td>
+        {{ finding.message }}
+        {% if finding.provenance_a or finding.provenance_b %}
+        <div class="prov">
+          {% if finding.provenance_a %}A: {{ finding.provenance_a.get("label") }} — “{{ finding.provenance_a.get("raw_text") }}”{% endif %}
+          {% if finding.provenance_b %}<br>B: {{ finding.provenance_b.get("label") }} — “{{ finding.provenance_b.get("raw_text") }}”{% endif %}
+        </div>
+        {% endif %}
+      </td>
+      <td class="num">{% if finding.delta is not none %}{{ finding.delta | br(4) }} {{ finding.unit }}{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </table>
+{% endfor %}
+
+{% if edits %}
+<h2>Correções aplicadas por revisão humana</h2>
+<table>
+  <tr><th>Doc.</th><th>Campo</th><th>Vértice</th><th>Lido no documento</th><th>Valor corrigido</th><th>Revisor</th></tr>
+  {% for edit in edits %}
+  <tr>
+    <td>{{ edit.role }}</td>
+    <td>{{ edit.field }}</td>
+    <td>{{ (edit.vertex_index + 1) if edit.vertex_index is not none else "—" }}</td>
+    <td>{{ edit.original }} <span class="prov">(“{{ edit.raw_text }}”)</span></td>
+    <td>{{ edit.current }}</td>
+    <td>{{ edit.author }}</td>
+  </tr>
+  {% endfor %}
+</table>
+{% endif %}
+
+<footer>
+  Critério de comparação: igualdade exata dos números. Qualquer diferença entre
+  os documentos, ou entre o valor declarado e o recalculado a partir das
+  coordenadas, é apontada. Distâncias recalculadas a partir de coordenadas UTM
+  foram reduzidas ao terreno pelo fator combinado de escala e altitude quando o
+  sistema de referência era conhecido.
+  Este laudo foi produzido por conferência automatizada e não substitui a responsabilidade
+  técnica do profissional habilitado.
+</footer>
+
+</body>
+</html>
