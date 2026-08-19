@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..db import get_session
-from ..deps import client_ip, current_user, require_editor
-from ..models import Document, User
+from ..deps import client_ip
+from ..models import Document
 from ..schemas import DocumentOut
 from ..security import record_audit
 from ..storage import UploadRejected, blob_path, store_upload
@@ -25,7 +25,6 @@ def upload_document(
     request: Request,
     file: UploadFile = File(...),
     session: Session = Depends(get_session),
-    user: User = Depends(require_editor),
 ) -> Document:
     """Recebe um PDF, valida por conteúdo e armazena endereçado pelo hash."""
     settings = get_settings()
@@ -46,12 +45,11 @@ def upload_document(
         sha256=blob.sha256,
         filename=(file.filename or "documento.pdf")[:255],
         size_bytes=blob.size_bytes,
-        uploaded_by=user.id,
     )
     session.add(document)
     record_audit(
         session,
-        user,
+        None,
         "document.upload",
         "document",
         blob.sha256,
@@ -66,7 +64,6 @@ def upload_document(
 def get_document(
     document_id: uuid.UUID,
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
 ) -> Document:
     document = session.get(Document, document_id)
     if document is None:
@@ -78,7 +75,6 @@ def get_document(
 def download_document(
     document_id: uuid.UUID,
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
 ) -> FileResponse:
     """Entrega o PDF original para o visualizador do frontend."""
     document = session.get(Document, document_id)

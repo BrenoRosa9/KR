@@ -6,9 +6,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     port: 5173,
-    // Em desenvolvimento o Vite roda em outra porta; o proxy mantém a mesma
-    // origem para o navegador, o que faz o cookie de sessão HttpOnly funcionar
-    // sem precisar afrouxar CORS nem SameSite.
+    // Em desenvolvimento o Vite roda em outra porta; o proxy encaminha /api
+    // para o backend na mesma origem do navegador.
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8000",

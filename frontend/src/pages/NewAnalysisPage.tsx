@@ -2,7 +2,6 @@ import { useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router";
 
 import { api } from "../api";
-import { canEdit, useAuth } from "../auth";
 import { Button, Card, ErrorNote, InfoNote } from "../components/Ui";
 import { bytes } from "../format";
 
@@ -62,14 +61,11 @@ function FilePicker({
 
 export default function NewAnalysisPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
   const [fileA, setFileA] = useState<File | null>(null);
   const [fileB, setFileB] = useState<File | null>(null);
   const [title, setTitle] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const editable = canEdit(user);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -94,11 +90,6 @@ export default function NewAnalysisPage() {
     <form onSubmit={submit} className="mx-auto max-w-3xl space-y-4 p-6">
       <h1 className="text-lg font-semibold text-slate-900">Nova análise</h1>
 
-      {!editable && (
-        <ErrorNote>
-          Seu perfil é somente leitura. Peça a um analista para criar a análise.
-        </ErrorNote>
-      )}
       {error && <ErrorNote>{error}</ErrorNote>}
 
       <Card title="Documentos">
@@ -142,7 +133,7 @@ export default function NewAnalysisPage() {
       <div className="flex justify-end gap-2">
         <Button
           type="submit"
-          disabled={!fileA || !fileB || busy || !editable}
+          disabled={!fileA || !fileB || busy}
         >
           {busy ? "Enviando…" : "Comparar documentos"}
         </Button>

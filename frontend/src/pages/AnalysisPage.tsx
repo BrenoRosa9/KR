@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "react-router";
 
 import { api } from "../api";
-import { canEdit, useAuth } from "../auth";
 import { DocumentPanel } from "../components/DocumentPanel";
 import { FindingsList } from "../components/FindingsList";
 import { PdfViewer, type Highlight } from "../components/PdfViewer";
@@ -29,8 +28,7 @@ const RUNNING = new Set(["pending", "extracting"]);
 
 export default function AnalysisPage() {
   const { id = "" } = useParams();
-  const { user } = useAuth();
-  const editable = canEdit(user);
+  const editable = true;
 
   const [detail, setDetail] = useState<AnalysisDetail | null>(null);
   // A observação não carrega o papel do documento; ela é pedida por papel.

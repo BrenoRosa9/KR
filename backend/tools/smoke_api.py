@@ -1,9 +1,9 @@
 """Exercita a aplicação inteira por HTTP, com dois PDFs de verdade.
 
 Sobe nada por conta própria: espera a API em ``--base`` e um worker rodando.
-Faz login, envia o par, acompanha a fila, imprime o resumo e grava o laudo.
+Envia o par, acompanha a fila, imprime o resumo e grava o laudo.
 
-    python tools/smoke_api.py --email a@b.c --senha ... A.pdf B.pdf
+    python tools/smoke_api.py A.pdf B.pdf
 """
 
 from __future__ import annotations
@@ -21,19 +21,11 @@ def main() -> int:
     parser.add_argument("pdf_a")
     parser.add_argument("pdf_b")
     parser.add_argument("--base", default="http://127.0.0.1:8000")
-    parser.add_argument("--email", required=True)
-    parser.add_argument("--senha", required=True)
     parser.add_argument("--timeout", type=float, default=300.0)
     parser.add_argument("--saida", default="laudo.html")
     args = parser.parse_args()
 
     with httpx.Client(base_url=args.base, timeout=120.0) as client:
-        response = client.post(
-            "/api/auth/login", json={"email": args.email, "password": args.senha}
-        )
-        response.raise_for_status()
-        print(f"Autenticado como {response.json()['name']}.")
-
         pdf_a, pdf_b = Path(args.pdf_a), Path(args.pdf_b)
         files = {
             "file_a": (pdf_a.name, pdf_a.read_bytes(), "application/pdf"),

@@ -4,7 +4,6 @@ import type {
   DocumentInfo,
   Observation,
   ToleranceProfile,
-  User,
 } from "./types";
 
 export class ApiError extends Error {
@@ -18,8 +17,6 @@ export class ApiError extends Error {
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
-    // A sessão é um cookie HttpOnly; sem isto ele não acompanha a requisição.
-    credentials: "include",
     ...init,
     headers: {
       ...(init.body instanceof FormData
@@ -50,16 +47,6 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  login: (email: string, password: string) =>
-    request<User>("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-
-  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
-
-  me: () => request<User>("/api/auth/me"),
-
   profiles: () => request<ToleranceProfile[]>("/api/profiles"),
 
   history: (limit = 50) =>

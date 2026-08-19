@@ -31,12 +31,6 @@ class Settings(BaseSettings):
     storage_root: Path = Path("/data")
     max_upload_mb: int = 200
 
-    session_secret: str = "troque-este-valor-em-producao"
-    session_hours: int = 12
-    # Bloqueio temporário depois de tentativas seguidas de senha errada.
-    max_login_attempts: int = 8
-    login_lockout_minutes: int = 15
-
     ocr_enabled: bool = True
     ocr_language: str = "por"
 

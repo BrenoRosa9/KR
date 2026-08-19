@@ -74,9 +74,14 @@ export function PdfViewer({
   const [zoom, setZoom] = useState(1);
   const [pageCount, setPageCount] = useState(0);
   const [pageNumber, setPageNumber] = useState(1);
+  const [pageSize, setPageSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [pointsPerPixel, setPointsPerPixel] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const lastHighlightKey = useRef<string | null>(null);
 
   useLayoutEffect(() => {
     const element = containerRef.current;
@@ -92,28 +97,57 @@ export function PdfViewer({
     if (highlight) setPageNumber(highlight.page);
   }, [highlight]);
 
-  // Rolar o destaque para o centro só faz sentido depois que a página rendeu
-  // e que sabemos a escala; por isso depende de pointsPerPixel.
+  useEffect(() => {
+    setPageSize(null);
+    lastHighlightKey.current = null;
+  }, [documentId]);
+
+  // Só centra o destaque quando ele muda — não a cada re-render do canvas
+  // (o zoom também atualiza a escala e dispararia um salto).
   useEffect(() => {
     if (!highlight?.bbox || pointsPerPixel === null) return;
-    if (pendingFocusRef.current) return;
+    const key = `${highlight.page}:${highlight.bbox.join(",")}`;
+    if (lastHighlightKey.current === key) return;
+    lastHighlightKey.current = key;
     overlayRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [highlight, pointsPerPixel, pageNumber]);
+  }, [highlight, pointsPerPixel]);
 
-  // Após o zoom, recoloca o ponto do conteúdo que estava sob o cursor
-  // (funciona mesmo com a página centralizada no wrapper).
-  useLayoutEffect(() => {
+  function captureZoomFocus(clientX: number, clientY: number) {
+    const page = pageRef.current;
+    if (!page) return;
+    const pageRect = page.getBoundingClientRect();
+    const pageWidth = pageRect.width || 1;
+    const pageHeight = pageRect.height || 1;
+    pendingFocusRef.current = {
+      relX: (clientX - pageRect.left) / pageWidth,
+      relY: (clientY - pageRect.top) / pageHeight,
+      clientX,
+      clientY,
+    };
+  }
+
+  function restoreZoomFocus() {
     const focus = pendingFocusRef.current;
     const container = containerRef.current;
     const page = pageRef.current;
-    if (!focus || !container || !page) return;
+    if (!focus || !container || !page) return false;
 
     const pageRect = page.getBoundingClientRect();
-    const pointX = pageRect.left + focus.relX * pageRect.width;
-    const pointY = pageRect.top + focus.relY * pageRect.height;
-    container.scrollLeft += pointX - focus.clientX;
-    container.scrollTop += pointY - focus.clientY;
+    if (pageRect.width < 8 || pageRect.height < 8) return false;
+
+    container.scrollLeft +=
+      pageRect.left + focus.relX * pageRect.width - focus.clientX;
+    container.scrollTop +=
+      pageRect.top + focus.relY * pageRect.height - focus.clientY;
     pendingFocusRef.current = null;
+    return true;
+  }
+
+  // O canvas do react-pdf só ganha o tamanho novo num useEffect interno.
+  // O invólucro tem largura/altura explícitas, então o layout — e o scroll —
+  // já podem ser corrigidos neste frame, ancorados no cursor.
+  useLayoutEffect(() => {
+    restoreZoomFocus();
   }, [zoom]);
 
   useEffect(() => {
@@ -122,7 +156,6 @@ export function PdfViewer({
 
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
-      const page = pageRef.current;
       const direction = event.deltaY > 0 ? -1 : 1;
       const factor =
         event.ctrlKey || event.metaKey ? WHEEL_ZOOM_STEP * 1.5 : WHEEL_ZOOM_STEP;
@@ -130,18 +163,7 @@ export function PdfViewer({
       setZoom((current) => {
         const next = clampZoom(current + direction * factor);
         if (next === current) return current;
-
-        if (page) {
-          const pageRect = page.getBoundingClientRect();
-          const width = pageRect.width || 1;
-          const height = pageRect.height || 1;
-          pendingFocusRef.current = {
-            relX: (event.clientX - pageRect.left) / width,
-            relY: (event.clientY - pageRect.top) / height,
-            clientX: event.clientX,
-            clientY: event.clientY,
-          };
-        }
+        captureZoomFocus(event.clientX, event.clientY);
         return next;
       });
     };
@@ -153,25 +175,14 @@ export function PdfViewer({
 
   function applyZoom(next: number) {
     const container = containerRef.current;
-    const page = pageRef.current;
     setZoom((current) => {
       const clamped = clampZoom(next);
       if (clamped === current || !container) return clamped;
-
-      if (page) {
-        const pageRect = page.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        const clientX = containerRect.left + container.clientWidth / 2;
-        const clientY = containerRect.top + container.clientHeight / 2;
-        const width = pageRect.width || 1;
-        const height = pageRect.height || 1;
-        pendingFocusRef.current = {
-          relX: (clientX - pageRect.left) / width,
-          relY: (clientY - pageRect.top) / height,
-          clientX,
-          clientY,
-        };
-      }
+      const containerRect = container.getBoundingClientRect();
+      captureZoomFocus(
+        containerRect.left + container.clientWidth / 2,
+        containerRect.top + container.clientHeight / 2,
+      );
       return clamped;
     });
   }
@@ -221,6 +232,11 @@ export function PdfViewer({
   const scale = pointsPerPixel === null ? 0 : 1 / pointsPerPixel;
   const box = highlight?.bbox;
   const showBox = box && box.length === 4 && highlight.page === pageNumber;
+  const displayWidth = width * zoom;
+  const displayHeight =
+    pageSize === null
+      ? undefined
+      : (pageSize.height / pageSize.width) * displayWidth;
 
   return (
     <div className="flex h-full flex-col rounded-lg border border-slate-200 bg-white">
@@ -285,7 +301,7 @@ export function PdfViewer({
         onPointerMove={onPointerMove}
         onPointerUp={endDrag}
         onPointerCancel={endDrag}
-        className={`flex-1 overflow-auto bg-slate-100 p-3 ${
+        className={`flex-1 overflow-auto bg-slate-100 p-3 [overflow-anchor:none] ${
           dragging ? "cursor-grabbing select-none" : "cursor-grab"
         }`}
       >
@@ -312,15 +328,26 @@ export function PdfViewer({
                 </div>
               }
             >
-              <div ref={pageRef} className="relative shadow-md">
+              <div
+                ref={pageRef}
+                className="relative shrink-0 overflow-hidden shadow-md [&_.react-pdf__Page]:size-full [&_canvas]:!size-full"
+                style={{ width: displayWidth, height: displayHeight }}
+              >
                 <Page
                   pageNumber={pageNumber}
-                  width={width * zoom}
+                  width={displayWidth}
                   renderAnnotationLayer={false}
                   renderTextLayer={false}
-                  onLoadSuccess={(page) =>
-                    setPointsPerPixel(page.originalWidth / page.width)
-                  }
+                  onLoadSuccess={(page) => {
+                    setPageSize({
+                      width: page.originalWidth,
+                      height: page.originalHeight,
+                    });
+                    setPointsPerPixel(page.originalWidth / page.width);
+                  }}
+                  onRenderSuccess={() => {
+                    restoreZoomFocus();
+                  }}
                   loading={
                     <div className="p-4">
                       <Spinner label="Renderizando página…" />

@@ -11,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from . import __version__
-from .api import analyses, auth, documents, reports
+from .api import analyses, documents, reports
 from .config import get_settings
 from .db import create_all, get_session
 from .jobs import queue_depth
@@ -50,12 +50,11 @@ def create_app() -> FastAPI:
         app.add_middleware(
             CORSMiddleware,
             allow_origins=settings.cors_origins,
-            allow_credentials=True,
+            allow_credentials=False,
             allow_methods=["*"],
             allow_headers=["*"],
         )
 
-    app.include_router(auth.router)
     app.include_router(documents.router)
     app.include_router(analyses.router)
     app.include_router(reports.router)

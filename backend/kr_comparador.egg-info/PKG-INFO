@@ -1,0 +1,37 @@
+Metadata-Version: 2.4
+Name: kr-comparador
+Version: 0.1.0
+Summary: Comparador de documentos técnicos de georreferenciamento
+Requires-Python: >=3.12
+Requires-Dist: numpy>=1.26
+Requires-Dist: scipy>=1.11
+Requires-Dist: pyproj>=3.6
+Requires-Dist: shapely>=2.0
+Requires-Dist: pdfplumber>=0.11
+Requires-Dist: pypdfium2>=4.30
+Requires-Dist: pikepdf>=9.0
+Requires-Dist: python-dateutil>=2.9
+Provides-Extra: server
+Requires-Dist: fastapi>=0.115; extra == "server"
+Requires-Dist: uvicorn[standard]>=0.30; extra == "server"
+Requires-Dist: pydantic>=2.8; extra == "server"
+Requires-Dist: pydantic-settings>=2.4; extra == "server"
+Requires-Dist: sqlalchemy>=2.0; extra == "server"
+Requires-Dist: psycopg[binary]>=3.2; extra == "server"
+Requires-Dist: alembic>=1.13; extra == "server"
+Requires-Dist: argon2-cffi>=23.1; extra == "server"
+Requires-Dist: itsdangerous>=2.2; extra == "server"
+Requires-Dist: python-multipart>=0.0.9; extra == "server"
+Requires-Dist: httpx>=0.27; extra == "server"
+Provides-Extra: ocr
+Requires-Dist: ocrmypdf>=16.0; extra == "ocr"
+Requires-Dist: pytesseract>=0.3.10; extra == "ocr"
+Provides-Extra: report
+Requires-Dist: jinja2>=3.1; extra == "report"
+Requires-Dist: weasyprint>=62.0; extra == "report"
+Requires-Dist: openpyxl>=3.1; extra == "report"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+Requires-Dist: ruff>=0.6; extra == "dev"
+Requires-Dist: mypy>=1.11; extra == "dev"

@@ -9,8 +9,7 @@ from fastapi.responses import HTMLResponse, Response
 from sqlalchemy.orm import Session
 
 from ..db import get_session
-from ..deps import current_user
-from ..models import Analysis, AnalysisStatus, User
+from ..models import Analysis, AnalysisStatus
 from ..reporting.report import render_html, render_pdf
 from ..storage import report_path
 
@@ -21,7 +20,6 @@ router = APIRouter(prefix="/api/analyses", tags=["reports"])
 def report_html(
     analysis_id: uuid.UUID,
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
 ) -> HTMLResponse:
     analysis = _ready_analysis(session, analysis_id)
     return HTMLResponse(render_html(session, analysis))
@@ -31,7 +29,6 @@ def report_html(
 def report_pdf(
     analysis_id: uuid.UUID,
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
 ) -> Response:
     analysis = _ready_analysis(session, analysis_id)
     html = render_html(session, analysis)

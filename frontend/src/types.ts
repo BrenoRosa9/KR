@@ -8,13 +8,6 @@ export type FindingKind =
   | "low_confidence"
   | "data_gap";
 
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: "admin" | "analyst" | "viewer";
-}
-
 /** bbox em pontos do PDF, convenção do pdfplumber: [x0, top, x1, bottom],
  *  com origem no canto superior esquerdo da página. */
 export type BBox = number[];

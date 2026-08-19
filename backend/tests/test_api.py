@@ -27,7 +27,6 @@ def api(tmp_path, monkeypatch):
     database_path = tmp_path / "test.db"
     monkeypatch.setenv("KR_DATABASE_URL", f"sqlite+pysqlite:///{database_path}")
     monkeypatch.setenv("KR_STORAGE_ROOT", str(tmp_path / "data"))
-    monkeypatch.setenv("KR_SESSION_SECRET", "chave-de-teste-suficientemente-longa")
     monkeypatch.setenv("KR_ENVIRONMENT", "test")
     monkeypatch.setenv("KR_OCR_ENABLED", "false")
 
@@ -42,7 +41,6 @@ def api(tmp_path, monkeypatch):
         "app.services",
         "app.security",
         "app.deps",
-        "app.api.auth",
         "app.api.documents",
         "app.api.analyses",
         "app.api.reports",
@@ -56,25 +54,13 @@ def api(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
     from app.config import get_settings
-    from app.db import create_all, session_scope
+    from app.db import create_all
     from app.main import create_app
-    from app.models import Role, User
-    from app.security import hash_password
 
     get_settings.cache_clear()
     settings = get_settings()
     settings.ensure_directories()
     create_all()
-
-    with session_scope() as session:
-        session.add(
-            User(
-                email="analista@empresa.com.br",
-                name="Analista de Teste",
-                password_hash=hash_password("senha-de-teste-longa"),
-                role=Role.ANALYST,
-            )
-        )
 
     client = TestClient(create_app())
     yield client
@@ -99,14 +85,6 @@ def pdfs(tmp_path):
         "b": write_memorial(tmp_path / "doc_b.pdf", MemorialSpec(ring=moved)),
         "identical": write_memorial(tmp_path / "doc_c.pdf", MemorialSpec(ring=ring)),
     }
-
-
-def login(client) -> None:
-    response = client.post(
-        "/api/auth/login",
-        json={"email": "analista@empresa.com.br", "password": "senha-de-teste-longa"},
-    )
-    assert response.status_code == 200, response.text
 
 
 def drain_queue() -> int:
@@ -137,40 +115,13 @@ def drain_queue() -> int:
         processed += 1
 
 
-class TestAuthentication:
-    def test_unauthenticated_access_is_refused(self, api):
-        assert api.get("/api/analyses").status_code == 401
-
-    def test_login_and_identity(self, api):
-        login(api)
-        response = api.get("/api/auth/me")
-        assert response.status_code == 200
-        assert response.json()["email"] == "analista@empresa.com.br"
-
-    def test_wrong_password_is_refused_without_revealing_cause(self, api):
-        response = api.post(
-            "/api/auth/login",
-            json={"email": "analista@empresa.com.br", "password": "errada"},
-        )
-        assert response.status_code == 401
-        assert response.json()["detail"] == "Credenciais inválidas."
-
-    def test_unknown_user_gives_the_same_message(self, api):
-        response = api.post(
-            "/api/auth/login",
-            json={"email": "ninguem@empresa.com.br", "password": "qualquer"},
-        )
-        assert response.json()["detail"] == "Credenciais inválidas."
-
-    def test_logout_invalidates_the_session(self, api):
-        login(api)
-        assert api.post("/api/auth/logout").status_code == 204
-        assert api.get("/api/auth/me").status_code == 401
+class TestOpenAccess:
+    def test_analyses_are_reachable_without_login(self, api):
+        assert api.get("/api/analyses").status_code == 200
 
 
 class TestUploadValidation:
     def test_non_pdf_is_rejected_by_content_not_extension(self, api):
-        login(api)
         response = api.post(
             "/api/documents",
             files={
@@ -181,7 +132,6 @@ class TestUploadValidation:
         assert "não é um PDF" in response.json()["detail"]
 
     def test_identical_content_is_deduplicated(self, api, pdfs):
-        login(api)
         first = api.post(
             "/api/documents",
             files={"file": ("a.pdf", pdfs["a"].read_bytes(), "application/pdf")},
@@ -194,7 +144,6 @@ class TestUploadValidation:
         assert second.json()["id"] == first.json()["id"]
 
     def test_comparing_a_document_with_itself_is_refused(self, api, pdfs):
-        login(api)
         uploaded = api.post(
             "/api/documents",
             files={"file": ("a.pdf", pdfs["a"].read_bytes(), "application/pdf")},
@@ -213,7 +162,6 @@ class TestUploadValidation:
 
 class TestFullFlow:
     def test_upload_pair_creates_analysis_and_queues_work(self, api, pdfs):
-        login(api)
         response = api.post(
             "/api/analyses/upload",
             files={
@@ -228,7 +176,6 @@ class TestFullFlow:
         assert drain_queue() >= 1
 
     def test_divergence_is_found_and_traceable(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -253,7 +200,6 @@ class TestFullFlow:
         assert provenance["raw_text"]
 
     def test_identical_documents_produce_no_errors(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -268,7 +214,6 @@ class TestFullFlow:
         assert errors == [], [f["message"] for f in errors]
 
     def test_crs_is_resolved_from_the_documents(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -284,7 +229,6 @@ class TestFullFlow:
             assert extraction["utm_zone"] == 23
 
     def test_stage_log_is_visible_for_diagnosis(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -300,7 +244,6 @@ class TestFullFlow:
         assert stages["parcel"]["ok"]
 
     def test_pdf_is_served_back_for_the_viewer(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -319,7 +262,6 @@ class TestFullFlow:
 
 class TestReview:
     def test_observations_are_listed_with_provenance(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -345,7 +287,6 @@ class TestReview:
         corrigir a observação de B para o valor de A, o erro tem que desaparecer
         do relatório sem que nada seja reextraído.
         """
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -396,7 +337,6 @@ class TestReview:
         assert coordinate_errors == [], [f["message"] for f in coordinate_errors]
 
     def test_recompare_keeps_exact_equality(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -416,7 +356,6 @@ class TestReview:
         assert detail["analysis"]["profile_name"] == "exato"
 
     def test_unknown_profile_is_refused(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -430,7 +369,6 @@ class TestReview:
         assert response.status_code == 400
 
     def test_manual_crs_confirmation(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -460,7 +398,6 @@ class TestReview:
 
 class TestReport:
     def test_html_report_contains_the_findings_and_exact_criterion(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -480,7 +417,6 @@ class TestReport:
         assert "Fator combinado de escala" in html
 
     def test_report_before_comparison_is_refused(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -492,7 +428,6 @@ class TestReport:
         assert response.status_code == 409
 
     def test_report_records_human_corrections(self, api, pdfs):
-        login(api)
         created = api.post(
             "/api/analyses/upload",
             files={
@@ -513,7 +448,7 @@ class TestReport:
 
         html = api.get(f"/api/analyses/{created['id']}/report.html").text
         assert "Correções aplicadas por revisão humana" in html
-        assert "Analista de Teste" in html
+        assert "—" in html
 
 
 class TestOperational:
@@ -526,7 +461,6 @@ class TestOperational:
         assert "queued" in body["queue"]
 
     def test_history_lists_analyses_newest_first(self, api, pdfs):
-        login(api)
         for _ in range(2):
             api.post(
                 "/api/analyses/upload",
@@ -540,7 +474,6 @@ class TestOperational:
         assert history[0]["created_at"] >= history[-1]["created_at"]
 
     def test_profiles_are_exposed_to_the_interface(self, api):
-        login(api)
         profiles = api.get("/api/profiles").json()
         assert len(profiles) == 1
         assert profiles[0]["key"] == "exato"
@@ -548,7 +481,6 @@ class TestOperational:
         assert profiles[0]["distance_m"] == 0.0
 
     def test_missing_analysis_is_404(self, api):
-        login(api)
         assert api.get(f"/api/analyses/{uuid.uuid4()}").status_code == 404
 
     def test_stale_job_is_returned_to_the_queue(self, api):
@@ -573,7 +505,6 @@ class TestOperational:
 
 def test_storage_layout_keeps_originals_immutable(api, pdfs, tmp_path):
     """Blobs por hash, derivados separados: é o que torna o backup simples."""
-    login(api)
     api.post(
         "/api/documents",
         files={"file": ("a.pdf", pdfs["a"].read_bytes(), "application/pdf")},

@@ -192,7 +192,7 @@ def run_recompare(session: Session, analysis_id: uuid.UUID) -> Analysis:
 
 def update_observation(
     session: Session,
-    user: User,
+    user: User | None,
     observation_id: uuid.UUID,
     value_num: float | None = None,
     value_text: str | None = None,
@@ -220,7 +220,7 @@ def update_observation(
 
     observation.edited = True
     observation.confidence = 1.0
-    observation.edited_by = user.id
+    observation.edited_by = user.id if user else None
     observation.edited_at = datetime.now(UTC)
 
     record_audit(
@@ -252,7 +252,7 @@ def update_observation(
 
 def set_extraction_crs(
     session: Session,
-    user: User,
+    user: User | None,
     extraction_id: uuid.UUID,
     epsg: str,
     datum_label: str,
@@ -264,7 +264,7 @@ def set_extraction_crs(
     """Confirma manualmente o sistema de referência de um documento.
 
     É a contrapartida da regra de nunca assumir datum: quando o documento não
-    declara, alguém precisa declarar, com registro de quem foi.
+    declara, alguém precisa declarar, com registro no log de auditoria.
     """
     extraction = session.get(Extraction, extraction_id)
     if extraction is None:

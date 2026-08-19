@@ -72,10 +72,8 @@ Na VM Linux (Hyper-V, Ubuntu Server LTS) do servidor Windows:
 ```bash
 git clone <repo> kr && cd kr
 cp .env.example .env
-# edite .env: senha do banco, KR_SESSION_SECRET, SITE_ADDRESS
+# edite .env: senha do banco, SITE_ADDRESS
 docker compose up -d --build
-docker compose exec api python -m app.cli create-user \
-    --email voce@empresa.com.br --name "Seu Nome" --role admin
 ```
 
 Verificação: `curl -fsS http://localhost/api/health` deve responder
@@ -93,7 +91,6 @@ pip install -e ".[server,report,dev]"
 $env:KR_DATABASE_URL = "sqlite+pysqlite:///./dev.db"
 $env:KR_STORAGE_ROOT = "./data"
 python -m app.cli init-db
-python -m app.cli create-user --email dev@local --name Dev --role admin
 uvicorn app.main:app --reload
 ```
 
@@ -113,6 +110,9 @@ npm run dev     # http://localhost:5173, com proxy de /api para :8000
 
 SQLite serve para o desenvolvimento; produção é Postgres. O OCR exige o
 Tesseract instalado, o que na prática significa rodar dentro do contêiner.
+
+Não há tela de login: a ferramenta é aberta a quem alcançar a rede interna da
+empresa.
 
 ## Testes
 

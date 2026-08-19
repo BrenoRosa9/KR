@@ -1,82 +1,27 @@
 """Comandos administrativos.
 
 Executar com ``python -m app.cli <comando>``. Deliberadamente enxuto: criar o
-primeiro usuário, redefinir senha, verificar integridade dos blobs e limpar
-sessões expiradas. Tudo o mais é feito pela interface.
+esquema, verificar integridade dos blobs e limpar sessões antigas. Tudo o mais
+é feito pela interface.
 """
 
 from __future__ import annotations
 
 import argparse
-import getpass
 import hashlib
-import re
-import sys
 
 from sqlalchemy import select
 
 from .config import get_settings
 from .db import create_all, session_scope
-from .models import Document, Role, User
-from .security import hash_password, purge_expired_sessions
+from .models import Document
+from .security import purge_expired_sessions
 from .storage import blob_path
-
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[A-Za-z]{2,}$")
 
 
 def command_init_db(_: argparse.Namespace) -> int:
     create_all()
     print("Esquema criado ou já existente.")
-    return 0
-
-
-def command_create_user(args: argparse.Namespace) -> int:
-    # A tela de login valida o endereço como e-mail. Sem a mesma checagem aqui,
-    # daria para criar um usuário que nunca conseguiria entrar.
-    if not _EMAIL_RE.match(args.email.strip()):
-        print(
-            f"“{args.email}” não é um endereço de e-mail válido, e a tela de login "
-            "só aceita e-mail. Use o endereço real da pessoa.",
-            file=sys.stderr,
-        )
-        return 1
-
-    password = args.password or getpass.getpass("Senha: ")
-    if len(password) < 10:
-        print(
-            "Senha muito curta. Use ao menos 10 caracteres — este é o único fator de "
-            "autenticação do sistema.",
-            file=sys.stderr,
-        )
-        return 1
-
-    with session_scope() as session:
-        if session.scalar(select(User).where(User.email == args.email.lower())):
-            print(f"Usuário {args.email} já existe.", file=sys.stderr)
-            return 1
-        session.add(
-            User(
-                email=args.email.strip().lower(),
-                name=args.name,
-                password_hash=hash_password(password),
-                role=args.role,
-            )
-        )
-    print(f"Usuário {args.email} criado com perfil {args.role}.")
-    return 0
-
-
-def command_reset_password(args: argparse.Namespace) -> int:
-    password = args.password or getpass.getpass("Nova senha: ")
-    with session_scope() as session:
-        user = session.scalar(select(User).where(User.email == args.email.lower()))
-        if user is None:
-            print(f"Usuário {args.email} não encontrado.", file=sys.stderr)
-            return 1
-        user.password_hash = hash_password(password)
-        user.failed_logins = 0
-        user.locked_until = None
-    print("Senha redefinida e bloqueio removido.")
     return 0
 
 
@@ -129,20 +74,6 @@ def build_parser() -> argparse.ArgumentParser:
         func=command_init_db
     )
 
-    create = subparsers.add_parser("create-user", help="cria um usuário")
-    create.add_argument("--email", required=True)
-    create.add_argument("--name", required=True)
-    create.add_argument(
-        "--role", default=Role.ANALYST, choices=[str(role) for role in Role]
-    )
-    create.add_argument("--password", default=None, help="omita para digitar oculto")
-    create.set_defaults(func=command_create_user)
-
-    reset = subparsers.add_parser("reset-password", help="redefine a senha")
-    reset.add_argument("--email", required=True)
-    reset.add_argument("--password", default=None)
-    reset.set_defaults(func=command_reset_password)
-
     subparsers.add_parser(
         "verify-blobs", help="confere integridade dos PDFs armazenados"
     ).set_defaults(func=command_verify_blobs)
@@ -160,4 +91,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main())

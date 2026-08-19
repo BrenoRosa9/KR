@@ -20,9 +20,9 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..core.tolerance import PROFILES
 from ..db import get_session
-from ..deps import client_ip, current_user, require_editor
+from ..deps import client_ip
 from ..jobs import RECOMPARE, enqueue
-from ..models import Analysis, Document, Extraction, Finding, Observation, User
+from ..models import Analysis, Document, Extraction, Finding, Observation
 from ..schemas import (
     AnalysisCreate,
     AnalysisDetail,
@@ -48,7 +48,7 @@ router = APIRouter(prefix="/api", tags=["analyses"])
 
 
 @router.get("/profiles", response_model=list[ProfileOut])
-def list_profiles(user: User = Depends(current_user)) -> list[ProfileOut]:
+def list_profiles() -> list[ProfileOut]:
     """Mantido por compatibilidade; há um único critério: igualdade exata."""
     from ..core.tolerance import DEFAULT_PROFILE_KEY
 
@@ -76,7 +76,6 @@ def list_profiles(user: User = Depends(current_user)) -> list[ProfileOut]:
 def create(
     payload: AnalysisCreate,
     session: Session = Depends(get_session),
-    user: User = Depends(require_editor),
 ) -> Analysis:
     document_a = session.get(Document, payload.document_a_id)
     document_b = session.get(Document, payload.document_b_id)
@@ -85,7 +84,7 @@ def create(
 
     try:
         return create_analysis(
-            session, user, document_a, document_b, payload.profile, payload.title
+            session, None, document_a, document_b, payload.profile, payload.title
         )
     except ServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -101,7 +100,6 @@ def create_with_upload(
     profile: str = Query("exato"),
     title: str = Query(""),
     session: Session = Depends(get_session),
-    user: User = Depends(require_editor),
 ) -> Analysis:
     """Envia os dois PDFs e cria a análise em uma única requisição.
 
@@ -128,7 +126,7 @@ def create_with_upload(
                 sha256=blob.sha256,
                 filename=(upload.filename or "documento.pdf")[:255],
                 size_bytes=blob.size_bytes,
-                uploaded_by=user.id,
+                uploaded_by=None,
             )
             session.add(document)
             session.flush()
@@ -136,7 +134,7 @@ def create_with_upload(
 
     record_audit(
         session,
-        user,
+        None,
         "document.upload_pair",
         "document",
         documents[0].sha256,
@@ -147,7 +145,7 @@ def create_with_upload(
 
     try:
         return create_analysis(
-            session, user, documents[0], documents[1], profile, title
+            session, None, documents[0], documents[1], profile, title
         )
     except ServiceError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -159,7 +157,6 @@ def history(
     offset: int = Query(0, ge=0),
     status_filter: str | None = Query(None, alias="status"),
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
 ) -> list[Analysis]:
     query = select(Analysis).order_by(Analysis.created_at.desc())
     if status_filter:
@@ -171,7 +168,6 @@ def history(
 def detail(
     analysis_id: uuid.UUID,
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
 ) -> AnalysisDetail:
     analysis = _get_analysis(session, analysis_id)
     extractions = list(
@@ -209,7 +205,6 @@ def observations(
     role: str | None = Query(None, pattern="^[AB]$"),
     low_confidence_only: bool = Query(False),
     session: Session = Depends(get_session),
-    user: User = Depends(current_user),
 ) -> list[Observation]:
     """Valores extraídos, para a tela de revisão."""
     analysis = _get_analysis(session, analysis_id)
@@ -240,7 +235,6 @@ def edit_observation(
     observation_id: uuid.UUID,
     payload: ObservationUpdate,
     session: Session = Depends(get_session),
-    user: User = Depends(require_editor),
 ) -> Observation:
     if payload.value_num is None and payload.value_text is None:
         raise HTTPException(
@@ -249,7 +243,7 @@ def edit_observation(
     try:
         return update_observation(
             session,
-            user,
+            None,
             observation_id,
             value_num=payload.value_num,
             value_text=payload.value_text,
@@ -264,13 +258,12 @@ def update_crs(
     extraction_id: uuid.UUID,
     payload: CRSUpdate,
     session: Session = Depends(get_session),
-    user: User = Depends(require_editor),
 ) -> Extraction:
     """Confirma manualmente datum e fuso de um documento."""
     try:
         return set_extraction_crs(
             session,
-            user,
+            None,
             extraction_id,
             epsg=payload.epsg,
             datum_label=payload.datum_label,
@@ -288,7 +281,6 @@ def recompare(
     analysis_id: uuid.UUID,
     profile: str | None = Query(None),
     session: Session = Depends(get_session),
-    user: User = Depends(require_editor),
 ) -> Analysis:
     """Recompara sem reextrair.
 
@@ -317,7 +309,7 @@ def recompare(
     enqueue(session, RECOMPARE, {"analysis_id": str(analysis.id)}, max_attempts=2)
     record_audit(
         session,
-        user,
+        None,
         "analysis.recompare",
         "analysis",
         str(analysis.id),
